@@ -12,12 +12,17 @@ import os
 st.set_page_config('626 Buget Analysis', page_icon=":chart_with_upwards_trend:", layout="wide")
 st.markdown(theme.FONT_CHANGE_CSS, unsafe_allow_html=True)
 
-CSSS = pd.read_excel("626_budget_analysis.xlsx", sheet_name="CSSS")
-CSSS.DATE = pd.to_datetime(CSSS.DATE).dt.date
+# @st.cache_data
+def load_data():
+    CSSS = pd.read_excel("626_budget_analysis.xlsx", sheet_name="CSSS")
+    CSSS.DATE = pd.to_datetime(CSSS.DATE).dt.date
 
-PO = pd.read_excel("626_budget_analysis.xlsx", sheet_name="PO")
-PO.DATE = pd.to_datetime(PO.DATE).dt.date
+    PO = pd.read_excel("626_budget_analysis.xlsx", sheet_name="PO")
+    PO.DATE = pd.to_datetime(PO.DATE).dt.date
 
+    return CSSS, PO
+
+CSSS, PO = load_data()
 
 reset = st.button("RESET FILTERS")
 if reset or not st.session_state.get("session"):
