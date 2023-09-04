@@ -55,11 +55,37 @@ def create_sel_bar_plot(df, height=500):
         st.session_state.cs_section_colors = new_colors
         st.experimental_rerun()
 
-def highlight(row, to_highlight):
+def highlight(row, to_highlight, color=theme.SECONDARY_COLOR):
     if any(item in to_highlight for item in row.values):
-        return [f'background-color: {theme.SECONDARY_COLOR}; color:{theme.BG_COLOR_SECONDARY}'] * len(row)
+        return [f'background-color: {color}; color:{theme.BG_COLOR_SECONDARY}'] * len(row)
     else:
         return [''] * len(row)
+
+
+def highlight_with_opacity(val, var_pct):
+    opacity = max(round(abs(min(abs(var_pct), 100)) / 100.0, 2), .25)
+    if val > 0:
+        color = theme.RED_RGBA
+    elif val < 0:
+        color = theme.GREEN_RGBA
+    else:
+        return f'background-color: {theme.BG_COLOR_SECONDARY}'
+    
+    color = list(color)
+    color[-1] = opacity
+    return f'background-color: rgba{str(tuple(color))}'
+
+
+def st_df(df, keep_percent=False, **kwargs):
+    variance_percent_series = df["VARIANCE (%)"]
+    
+    display_df = df.copy()
+    if not keep_percent:
+        display_df.drop("VARIANCE (%)", axis=1, inplace=True)
+
+    styled_df = display_df.style.apply(lambda row: [highlight_with_opacity(row['VARIANCE'], variance_percent_series[row.name]) for _ in row], axis=1)
+
+    return st.dataframe(styled_df, **kwargs)
 
 
 # PAGES —————————————————————————————————————————————————————————————————————————————————————————————————————————
@@ -86,12 +112,12 @@ def cost_summary(CSSS):
         
         cols = st.columns([0.3, 0.7])
         with cols[0]:
-            display_df = df["VARIANCE"].reset_index(drop=False)
+            display_df = df[["VARIANCE", "VARIANCE (%)"]].reset_index(drop=False)
             if st.session_state.get("cs_sel_section"):
                 check_df = CSSS[CSSS["SECTION"].isin(st.session_state.cs_sel_section)]
                 if not check_df.empty:
                     display_df = display_df.style.apply(highlight, axis=1, to_highlight=st.session_state.cs_sel_section)
-            st.dataframe(display_df, use_container_width=True, height=550, hide_index=True)
+            st_df(display_df, use_container_width=True, height=550, hide_index=True)
         with cols[1]:
             if st.session_state.get("cs_sel_section"):
                 if not check_df.empty:
@@ -101,7 +127,7 @@ def cost_summary(CSSS):
                 st.markdown("#### ALL SECTIONS AVERAGE METRICS")
             
             avgs = CSSS[METRICS].mean().to_frame().T
-            st.dataframe(avgs, hide_index=True, use_container_width=True)
+            st_df(avgs, keep_percent=True, hide_index=True, use_container_width=True)
             with st.empty():
                 create_sel_bar_plot(df)
 
@@ -114,7 +140,7 @@ def cost_summary(CSSS):
         
         cols = st.columns([0.3, 0.7])
         with cols[0]:
-            st.dataframe(df[["VARIANCE", "VARIANCE (%)"]], use_container_width=True)
+            st_df(df[["VARIANCE", "VARIANCE (%)"]], keep_percent=True, use_container_width=True)
         with cols[1]:
             fig = px.bar(
                 df,
@@ -132,7 +158,7 @@ def cost_summary(CSSS):
         
         cols = st.columns([0.3, 0.7])
         with cols[0]:
-            st.dataframe(df[["VARIANCE", "VARIANCE (%)"]], use_container_width=True)
+            st_df(df[["VARIANCE", "VARIANCE (%)"]], keep_percent=True, use_container_width=True)
         with cols[1]:
             fig = px.bar(
                 df,
@@ -152,8 +178,7 @@ def cost_summary_table_view(CSSS:pd.DataFrame):
     else:
         df_to_show = df_to_show.groupby("SECTION").mean(numeric_only=True).reset_index()
 
-
-    st.dataframe(df_to_show, use_container_width=True, hide_index=True)
+    st_df(df_to_show, keep_percent=True, use_container_width=True, hide_index=True)
 
 
 def cost_summary_time(CSSS):

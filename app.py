@@ -16,6 +16,9 @@ st.markdown(theme.FONT_CHANGE_CSS, unsafe_allow_html=True)
 def load_data():
     CSSS = pd.read_excel("626_budget_analysis.xlsx", sheet_name="CSSS")
     CSSS.DATE = pd.to_datetime(CSSS.DATE).dt.date
+    CSSS["VARIANCE (%)"] *= 100
+    CSSS["VARIANCE (%)"] = CSSS["VARIANCE (%)"].apply(lambda x: -100 if x < -100 else (100 if x > 100 else x))
+
 
     PO = pd.read_excel("626_budget_analysis.xlsx", sheet_name="PO")
     PO.DATE = pd.to_datetime(PO.DATE).dt.date
