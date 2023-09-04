@@ -7,7 +7,7 @@ import theme
 
 
 METRICS = ["VARIANCE", "VARIANCE (%)", "ESTIMATE", "ACTUAL"]
-
+FINANCIAL = ["VARIANCE", "ESTIMATE", "ACTUAL"]
 
 # HELPERS ———————————————————————————————————————————————————————————————————————————————————————————————————————
 def add_v_space(size:int=1) -> None:
@@ -55,11 +55,11 @@ def create_sel_bar_plot(df, height=500):
         st.session_state.cs_section_colors = new_colors
         st.experimental_rerun()
 
-def highlight(row, to_highlight, color=theme.SECONDARY_COLOR):
+def highlight(row, to_highlight, color="#FFFFFF"):
     if any(item in to_highlight for item in row.values):
-        return [f'background-color: {color}; color:{theme.BG_COLOR_SECONDARY}'] * len(row)
+        return [f'color:{color}; font-weight:bold'] * len(row)
     else:
-        return [''] * len(row)
+        return [f'color:{theme.BG_COLOR_PRIMARY}'] * len(row)
 
 
 def highlight_with_opacity(val, var_pct):
@@ -76,14 +76,25 @@ def highlight_with_opacity(val, var_pct):
     return f'background-color: rgba{str(tuple(color))}'
 
 
-def st_df(df, keep_percent=False, **kwargs):
+def st_df(df, keep_percent=False, highlight_text=False, **kwargs):
     variance_percent_series = df["VARIANCE (%)"]
+    variance_series = df["VARIANCE"]
     
     display_df = df.copy()
     if not keep_percent:
         display_df.drop("VARIANCE (%)", axis=1, inplace=True)
+    
 
-    styled_df = display_df.style.apply(lambda row: [highlight_with_opacity(row['VARIANCE'], variance_percent_series[row.name]) for _ in row], axis=1)
+    for metric in FINANCIAL:
+            cols = []
+            if metric in display_df.columns:
+                cols.append(metric)
+            display_df[cols] = display_df[cols].applymap('${:,.2f}'.format)
+
+    styled_df = display_df.style.apply(lambda row: [highlight_with_opacity(variance_series[row.name], variance_percent_series[row.name]) for _ in row], axis=1)
+
+    if highlight_text:
+        styled_df = styled_df.apply(highlight, axis=1, to_highlight=st.session_state.cs_sel_section)
 
     return st.dataframe(styled_df, **kwargs)
 
@@ -112,19 +123,21 @@ def cost_summary(CSSS):
         
         cols = st.columns([0.3, 0.7])
         with cols[0]:
+            highlight_text = False
             display_df = df[["VARIANCE", "VARIANCE (%)"]].reset_index(drop=False)
             if st.session_state.get("cs_sel_section"):
                 check_df = CSSS[CSSS["SECTION"].isin(st.session_state.cs_sel_section)]
                 if not check_df.empty:
-                    display_df = display_df.style.apply(highlight, axis=1, to_highlight=st.session_state.cs_sel_section)
-            st_df(display_df, use_container_width=True, height=550, hide_index=True)
+                    highlight_text = True
+            
+            st_df(display_df, use_container_width=True, highlight_text=highlight_text, height=550, hide_index=True)
         with cols[1]:
             if st.session_state.get("cs_sel_section"):
                 if not check_df.empty:
                     CSSS = check_df
                 st.markdown("#### {} SECTION(S) AVERAGE METRICS".format(", ".join(st.session_state.cs_sel_section)))
             else:
-                st.markdown("#### ALL SECTIONS AVERAGE METRICS")
+                st.markdown("#### AGGREGATE AVERAGE METRICS")
             
             avgs = CSSS[METRICS].mean().to_frame().T
             st_df(avgs, keep_percent=True, hide_index=True, use_container_width=True)
@@ -247,6 +260,7 @@ def purchase_order_logs(PO):
     )
 
     if not changed.equals(out_df):
+        df = PO[["PAYEE", "ACTUAL", "DATE", "PROJECT NAME", "SECTION", "LINE", "LINE DESCRIPTION"]]
         payee = changed[changed["DIVE"]==True].PAYEE
         st.dataframe(
             df[df.PAYEE.isin(payee)].sort_values(by="PAYEE"),
