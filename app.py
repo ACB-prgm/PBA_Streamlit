@@ -31,16 +31,19 @@ def load_data(cache_key):
     CSSS.DATE = pd.to_datetime(CSSS.DATE).dt.date
     # TEMP MITIGATION FOR VARIANCE ISSUE
     CSSS["VARIANCE (%)"] = ((CSSS["ACTUAL"] - CSSS["ESTIMATE"]) / CSSS["ESTIMATE"]) * 100
-    CSSS["VARIANCE (%)"] *= 100
     CSSS["VARIANCE (%)"] = CSSS["VARIANCE (%)"].apply(lambda x: -100 if x < -100 else (100 if x > 100 else x))
 
-
-    PO = pd.read_excel("626_budget_analysis.xlsx", sheet_name="PO")
+    PO = pd.read_excel("626_budget_analysis.xlsx", sheet_name="PO") 
     PO.DATE = pd.to_datetime(PO.DATE).dt.date
 
-    return CSSS, PO
+    PR = pd.read_excel("626_budget_analysis.xlsx", sheet_name="PR") 
+    PR["VARIANCE (%)"] = ((PR["ACTUAL"] - PR["EST"]) / PR["EST"]) * 100
+    PR["VARIANCE (%)"] = PR["VARIANCE (%)"].apply(lambda x: -100 if x < -100 else (100 if x > 100 else x))
 
-CSSS, PO = load_data(st.session_state.get("data_cache_key"))
+    return CSSS, PO, PR
+
+CSSS, PO, PR = load_data(st.session_state.get("data_cache_key"))
+
 
 with st.container():
     cols = st.columns(4)
@@ -76,7 +79,8 @@ pages = [
     "COST SUMMARY",
     "COST SUMMARY TABLE VIEW",
     "COST SUMMARY OVER TIME",
-    "PURCHASE ORDER LOGS"
+    "PURCHASE ORDER LOGS",
+    "PAYROLL"
 ]
 
 with st.sidebar:
@@ -97,6 +101,8 @@ else:
         streamlit_pages.cost_summary_time(CSSS)
     elif selected_page == pages[4]:
         streamlit_pages.purchase_order_logs(PO)
+    elif selected_page == pages[5]:
+        streamlit_pages.payroll(PR)
 
 if __name__ == "__main__":
     if not st.secrets.get("PRODUCTION") and not os.environ.get("streamlit_started"):

@@ -8,7 +8,7 @@ import time
 
 
 METRICS = ["VARIANCE", "VARIANCE (%)", "ESTIMATE", "ACTUAL"]
-FINANCIAL = ["VARIANCE", "ESTIMATE", "ACTUAL"]
+FINANCIAL = ["VARIANCE", "ESTIMATE", "ACTUAL", "EST"]
 
 # HELPERS ———————————————————————————————————————————————————————————————————————————————————————————————————————
 def add_v_space(size:int=1) -> None:
@@ -77,16 +77,19 @@ def highlight_with_opacity(val, var_pct):
     return f'background-color: rgba{str(tuple(color))}'
 
 
-def st_df(df, keep_percent=False, highlight_text=False, **kwargs):
-    variance_percent_series = df["VARIANCE (%)"]
-    
-    # Drops Var% if only using for the purposes of determining the higlight opacity
+def st_df(df:pd.DataFrame, keep_percent=False, highlight_text=False, editable=False, **kwargs):
     display_df = df.copy()
-    if not keep_percent:
-        display_df.drop("VARIANCE (%)", axis=1, inplace=True)
+    if "VARIANCE (%)" in df.columns:
+        variance_percent_series = df["VARIANCE (%)"]
+        
+        # Drops Var% if only using for the purposes of determining the higlight opacity
+        if not keep_percent:
+            display_df.drop("VARIANCE (%)", axis=1, inplace=True)
 
-    # Apply red/green highlighting
-    styled_df = display_df.style.apply(lambda row: [highlight_with_opacity(row["VARIANCE"], variance_percent_series[row.name]) for _ in row], axis=1)
+        # Apply red/green highlighting
+        styled_df = display_df.style.apply(lambda row: [highlight_with_opacity(row["VARIANCE"], variance_percent_series[row.name]) for _ in row], axis=1)
+    else:
+        styled_df = display_df.style
 
     # Highlights if a selectable chart
     if highlight_text:
@@ -97,8 +100,14 @@ def st_df(df, keep_percent=False, highlight_text=False, **kwargs):
     for metric in FINANCIAL:
         if metric in display_df.columns:
             col_style[metric] = "${:,.2f}"
+    
+    if keep_percent:
+        col_style["VARIANCE (%)"] = "{:.2f}"
     styled_df = styled_df.format(col_style)
 
+    if editable:
+        return st.data_editor(styled_df, **kwargs)
+    
     return st.dataframe(styled_df, **kwargs)
 
 
@@ -195,7 +204,7 @@ def cost_summary_table_view(CSSS:pd.DataFrame):
 
     if st.checkbox("BY SUBSECTION"):
         df_to_show = df_to_show.groupby(["SECTION", "SUB SECTION"]).mean(numeric_only=True).reset_index()
-        df_to_show['SECTION'] = df_to_show['SECTION'].mask(df_to_show['SECTION'].duplicated(), '')
+        # df_to_show['SECTION'] = df_to_show['SECTION'].mask(df_to_show['SECTION'].duplicated(), '')
     else:
         df_to_show = df_to_show.groupby("SECTION").mean(numeric_only=True).reset_index()
 
@@ -260,8 +269,8 @@ def purchase_order_logs(PO):
         out_df = df.groupby("PAYEE").mean(numeric_only=True).reset_index().sort_values(by="ACTUAL", ascending=False)
         out_df.insert(0, 'DIVE', False)
     
-    changed = st.data_editor(
-        out_df, use_container_width=True, hide_index=True, disabled=out_df.columns[1:], key="PO_DE_" + st.session_state.session,
+    changed = st_df(
+        out_df, editable=True, use_container_width=True, hide_index=True, disabled=out_df.columns[1:], key="PO_DE_" + st.session_state.session,
         column_config=st.column_config.CheckboxColumn(
             "DIVE", width="small", help="CHECK A BOX TO DISPLAY THAT PAYEE'S PROJECTS"
         )
@@ -270,8 +279,37 @@ def purchase_order_logs(PO):
     if not changed.equals(out_df):
         df = PO[["PAYEE", "ACTUAL", "DATE", "PROJECT NAME", "SECTION", "LINE", "LINE DESCRIPTION"]]
         payee = changed[changed["DIVE"]==True].PAYEE
-        st.dataframe(
+        st_df(
             df[df.PAYEE.isin(payee)].sort_values(by="PAYEE"),
             use_container_width=True, hide_index=True
         )
 
+def payroll(PR):
+    df = PR[["PAYEE", "ACTUAL", "VARIANCE", "VARIANCE (%)", "PROJECT NAME"]]
+    counts = df.groupby("PAYEE").size().reset_index(name='COUNT')
+    df = pd.merge(df, counts, on="PAYEE").sort_values(by="ACTUAL", ascending=False)
+    if st.session_state.get("PR_df"):
+        out_df = st.session_state.PR_df
+    else:
+        out_df = df.groupby("PAYEE").mean(numeric_only=True).reset_index().sort_values(by="ACTUAL", ascending=False)
+        out_df.insert(0, 'DIVE', False)
+        out_df.COUNT = out_df.COUNT.astype(int)
+        out_df["VARIANCE (%)"] = out_df["VARIANCE (%)"].round(2)
+    
+    out_df.drop(columns=["ACTUAL"], inplace=True)
+    changed = st_df(
+        out_df, keep_percent=True, editable=True, use_container_width=True, hide_index=True, disabled=out_df.columns[1:], key="PR_DE_" + st.session_state.session,
+        column_config={
+            "DIVE" : st.column_config.CheckboxColumn(
+                "DIVE", width="small", help="CHECK A BOX TO DISPLAY THAT PAYEE'S PROJECTS"
+            )
+        }
+    )
+
+    if not changed.equals(out_df):
+        df = PR[["PAYEE", "EST", "ACTUAL", "VARIANCE", "VARIANCE (%)",  "PROJECT NAME", "SECTION", "LINE", "LINE DESCRIPTION"]]
+        payee = changed[changed["DIVE"]==True].PAYEE
+        st_df(
+            df[df.PAYEE.isin(payee)].sort_values(by="PAYEE"), keep_percent=True,
+            use_container_width=True, hide_index=True
+        )
