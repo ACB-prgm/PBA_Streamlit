@@ -12,10 +12,25 @@ import os
 st.set_page_config('626 Buget Analysis', page_icon=":chart_with_upwards_trend:", layout="wide")
 st.markdown(theme.FONT_CHANGE_CSS, unsafe_allow_html=True)
 
-# @st.cache_data
-def load_data():
+if not st.session_state.get("data_cache_key"):
+    st.session_state["data_cache_key"] = str(time.time())
+
+reset = st.button("RESET FILTERS")
+if reset or not st.session_state.get("session"):
+    data_cache_key = st.session_state.get("data_cache_key")
+    st.session_state.clear()
+    session = str(time.time())
+    st.session_state["session"] = session
+    st.session_state["data_cache_key"] = data_cache_key
+else:
+    session = st.session_state.session
+
+@st.cache_data
+def load_data(cache_key):
     CSSS = pd.read_excel("626_budget_analysis.xlsx", sheet_name="CSSS")
     CSSS.DATE = pd.to_datetime(CSSS.DATE).dt.date
+    # TEMP MITIGATION FOR VARIANCE ISSUE
+    CSSS["VARIANCE (%)"] = ((CSSS["ACTUAL"] - CSSS["ESTIMATE"]) / CSSS["ESTIMATE"]) * 100
     CSSS["VARIANCE (%)"] *= 100
     CSSS["VARIANCE (%)"] = CSSS["VARIANCE (%)"].apply(lambda x: -100 if x < -100 else (100 if x > 100 else x))
 
@@ -25,15 +40,7 @@ def load_data():
 
     return CSSS, PO
 
-CSSS, PO = load_data()
-
-reset = st.button("RESET FILTERS")
-if reset or not st.session_state.get("session"):
-    st.session_state.clear()
-    session = str(time.time())
-    st.session_state["session"] = session
-else:
-    session = st.session_state.session
+CSSS, PO = load_data(st.session_state.get("data_cache_key"))
 
 with st.container():
     cols = st.columns(4)

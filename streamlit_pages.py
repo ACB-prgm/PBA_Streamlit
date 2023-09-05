@@ -4,6 +4,7 @@ import plotly.express as px
 import streamlit as st
 import pandas as pd
 import theme
+import time
 
 
 METRICS = ["VARIANCE", "VARIANCE (%)", "ESTIMATE", "ACTUAL"]
@@ -107,6 +108,11 @@ def home():
         cols = st.columns(3)
         with cols[1]:
             st.markdown("### PRODUCTION BUDGET ANALYSIS")
+    
+    refresh = st.button("REFRESH DATA")
+    if refresh:
+        st.session_state["data_cache_key"] = str(time.time())
+        st.experimental_rerun()
             
     add_v_space(8)
     with st.empty():
