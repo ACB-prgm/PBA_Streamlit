@@ -79,23 +79,25 @@ def highlight_with_opacity(val, var_pct):
 
 def st_df(df, keep_percent=False, highlight_text=False, **kwargs):
     variance_percent_series = df["VARIANCE (%)"]
-    variance_series = df["VARIANCE"]
     
+    # Drops Var% if only using for the purposes of determining the higlight opacity
     display_df = df.copy()
     if not keep_percent:
         display_df.drop("VARIANCE (%)", axis=1, inplace=True)
-    
 
-    for metric in FINANCIAL:
-            cols = []
-            if metric in display_df.columns:
-                cols.append(metric)
-            display_df[cols] = display_df[cols].applymap('${:,.2f}'.format)
+    # Apply red/green highlighting
+    styled_df = display_df.style.apply(lambda row: [highlight_with_opacity(row["VARIANCE"], variance_percent_series[row.name]) for _ in row], axis=1)
 
-    styled_df = display_df.style.apply(lambda row: [highlight_with_opacity(variance_series[row.name], variance_percent_series[row.name]) for _ in row], axis=1)
-
+    # Highlights if a selectable chart
     if highlight_text:
         styled_df = styled_df.apply(highlight, axis=1, to_highlight=st.session_state.cs_sel_section)
+    
+    # Apply financial formatting
+    col_style = {}
+    for metric in FINANCIAL:
+        if metric in display_df.columns:
+            col_style[metric] = "${:,.2f}"
+    styled_df = styled_df.format(col_style)
 
     return st.dataframe(styled_df, **kwargs)
 
