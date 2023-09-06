@@ -268,6 +268,7 @@ def purchase_order_logs(PO):
     else:
         out_df = df.groupby("PAYEE").mean(numeric_only=True).reset_index().sort_values(by="ACTUAL", ascending=False)
         out_df.insert(0, 'DIVE', False)
+        out_df.COUNT = out_df.COUNT.astype(int)
     
     changed = st_df(
         out_df, editable=True, use_container_width=True, hide_index=True, disabled=out_df.columns[1:], key="PO_DE_" + st.session_state.session,
