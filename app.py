@@ -2,19 +2,19 @@ from streamlit_option_menu import option_menu
 import streamlit_pages
 import streamlit as st
 import pandas as pd
+import AuthManager
 import subprocess
 import theme
 import time
 import os
 
 
-ADMIN_NAME = "Jake"
-ADMIN_PASS = "1234"
-
-PASSWORD = "1234"
-
 st.set_page_config('626 Buget Analysis', page_icon=":chart_with_upwards_trend:", layout="wide")
 st.markdown(theme.FONT_CHANGE_CSS, unsafe_allow_html=True)
+
+ADMIN_NAME = ""
+ADMIN_PASS = ""
+PASSWORD = ""
 
 def main():
     # ALL PAGES —————————————————————————————————————————————————————————————————————————————————
@@ -114,10 +114,9 @@ def main():
         elif selected_page == pages[5]:
             streamlit_pages.payroll(PR)
 
-
 def log_in():
     st.title("LOGIN")
-    option = st.selectbox("SELECT LOGIN TYPE", ["ADMIN LOG IN", "VIEWER LOG IN", "CREATE ACCOUNT"])
+    option = st.radio("SELECT LOGIN TYPE", ["ADMIN LOG IN", "VIEWER LOG IN", "CREATE ADMIN ACCOUNT"])
     
     if option == "ADMIN LOG IN":
         with st.form("admin_login"):
@@ -140,12 +139,44 @@ def log_in():
                 else:
                     st.write("INCORRECT PASSWORD")
     
-    elif option == "CREATE ACCOUNT":
-        with st.form("create_account"):
-            info = (st.text_input("ENTER A USERNAME", placeholder="USERNAME"), st.text_input("ENTER A PASSWORD", type="password", placeholder="PASSWORD"), st.text_input("CONFIRM PASSWORD", type="password", placeholder="PASSWORD"))
-            form_complete = info[0] != "" and info[1] != "" and info[1] == info[2]
-            if st.form_submit_button("CREATE ACCOUNT") and form_complete or form_complete:
-                print("created")
+    elif option == "CREATE ADMIN ACCOUNT":
+        if not st.session_state.get("create_form_complete"):
+            with st.form("create_account"):
+                info = (
+                    st.text_input("ENTER A USERNAME", placeholder="USERNAME"),
+                    st.text_input("ENTER A PASSWORD", type="password", placeholder="PASSWORD"),
+                    st.text_input("CONFIRM PASSWORD", type="password", placeholder="PASSWORD"),
+                    st.text_input("ENTER A VIEWER USERNAME", placeholder="VIEWER USERNAME", help="This will be the USERNAME you share with people you want to be able to view the site."),
+                    st.text_input("ENTER A VIEWER PASSWORD", placeholder="VIEWER PASSWORD", help="This will be the PASSWORD you share with people you want to be able to view the site."), 
+                )
+                form_complete = not True in [x == "" for x in info]
+                if st.form_submit_button("SUBMIT") and form_complete or form_complete:
+                    if info[1] != info[2]:
+                        st.write("YOUR PASSWORDS DO NOT MATCH")
+                    else:
+                        account_info = {
+                                "username" : info[0],
+                                "password" : info[1],
+                                "viewer" : info[3],
+                                "viewer_password" : info[4]
+                            }
+                        ERR = AuthManager.create_admin(account_info)
+                        if ERR:
+                            st.write(ERR)
+                        else:
+                            st.session_state["create_form_complete"] = 1
+                            st.session_state["account_info"] = account_info
+                            st.experimental_rerun()
+        elif st.session_state["create_form_complete"] == 1:
+            account_info = st.session_state["account_info"]
+            if not st.session_state.get("dbx_authorized"):
+                AuthManager.st_oauth(account_info)
+            elif not st.session_state.get("google_authorized"):
+                AuthManager.st_oauth(account_info, "google")
+            else:
+                st.session_state["logged_in"] = True
+                st.experimental_rerun()
+                    
 
 
 if st.session_state.get("logged_in"):
