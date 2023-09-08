@@ -277,7 +277,6 @@ def st_oauth(account_info, service="dbx") -> None:
     result = oauth2.authorize_button(msg, APP_URL, scopes)
 
     if result and result.get("token"):
-        print(service)
         token = result.get('token')
         account_info[f"{service}_token"] = token
         st.session_state[f"{service}_authorized"] = True
