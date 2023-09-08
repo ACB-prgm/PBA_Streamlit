@@ -123,21 +123,24 @@ def log_in():
             attempt = (st.text_input("ENTER USERNAME", placeholder="USERNAME"), st.text_input("ENTER PASSWORD", type="password", placeholder="PASSWORD"))
             form_complete = attempt[0] != "" and attempt[1] != ""
             if st.form_submit_button("LOG IN AS ADMIN") and form_complete or form_complete:
-                if attempt[0] == ADMIN_NAME and attempt[1] == ADMIN_PASS:
+                ERR = AuthManager.admin_login(attempt[0], attempt[1])
+                if ERR:
+                    st.write(ERR)
+                else:
                     st.session_state["logged_in"] = True
                     st.experimental_rerun()
-                else:
-                    st.write("INCORRECT CREDENTIALS")
 
     elif option == "VIEWER LOG IN":
         with st.form("viewer_login"):
-            attempt = st.text_input("ENTER PASSWORD", type="password", placeholder="PASSWORD")
-            if st.form_submit_button("SUBMIT PASSWORD") or attempt:
-                if attempt == PASSWORD:
+            attempt = (st.text_input("ENTER USERNAME", placeholder="USERNAME"), st.text_input("ENTER PASSWORD", type="password", placeholder="PASSWORD"))
+            form_complete = attempt[0] != "" and attempt[1] != ""
+            if st.form_submit_button("LOG IN AS VIEWER") and form_complete or form_complete:
+                ERR = AuthManager.viewer_login(attempt[0], attempt[1])
+                if ERR:
+                    st.write(ERR)
+                else:
                     st.session_state["logged_in"] = True
                     st.experimental_rerun()
-                else:
-                    st.write("INCORRECT PASSWORD")
     
     elif option == "CREATE ADMIN ACCOUNT":
         if not st.session_state.get("create_form_complete"):

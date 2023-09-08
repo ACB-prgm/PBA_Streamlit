@@ -3,10 +3,10 @@ from urllib.parse import urlencode
 import streamlit as st
 import requests
 import gspread
+import hashlib
 import base64
 import boto3
 import json
-import time
 import os
 
 
@@ -232,6 +232,10 @@ def get_st_auth_args(service="dbx") -> dict:
     }
 
 @st.cache_data
+def hash(input_string:str) -> str:
+    return hashlib.sha256(input_string.encode('utf-8')).hexdigest()
+
+@st.cache_data
 def create_admin(info):
     # PULL THE ADMINS INFO
     try:
@@ -247,6 +251,8 @@ def create_admin(info):
     elif info.get("viewer") in viewers:
         return "VIEWER USERNAME ALREADY EXISTS"
     else:
+        info["password"] = hash(info.get("password"))
+        info["viewer_password"] = hash(info.get("viewer_password"))
         admins[info.get("username")] = info
         viewers[info.get("viewer")] = {
             "password" : info.get("viewer_password"),
@@ -257,14 +263,49 @@ def create_admin(info):
     s3.put_object(Bucket=BUCKET, Key=ADMINS_INFO, Body=json.dumps(admins))
     s3.put_object(Bucket=BUCKET, Key=VIEWERS_INFO, Body=json.dumps(viewers))
 
+@st.cache_data
 def update_admin(info:dict) -> None:
     admins = json.loads(s3.get_object(Bucket=BUCKET, Key=ADMINS_INFO)["Body"].read())
     admins[info.get("username")] = info
     s3.put_object(Bucket=BUCKET, Key=ADMINS_INFO, Body=json.dumps(admins))
 
+@st.cache_data
 def get_admin_info(admin:str) -> dict:
-    admins = json.loads(s3.get_object(Bucket=BUCKET, Key=ADMINS_INFO)["Body"].read())
+    try:
+        admins = json.loads(s3.get_object(Bucket=BUCKET, Key=ADMINS_INFO)["Body"].read())
+    except:
+        return None
     return admins.get(admin)
+
+@st.cache_data
+def admin_login(admin:str, password:str):
+    admin_info = get_admin_info(admin)
+
+    if not admin_info:
+        return "ADMIN NOT FOUND"
+    if hash(password) != admin_info.get("password"):
+        return "INCORRECT PASSWORD"
+
+    st.session_state.account_info = admin_info
+
+@st.cache_data
+def get_viewer_info(viewer:str) -> dict:
+    try:
+        viewers = json.loads(s3.get_object(Bucket=BUCKET, Key=VIEWERS_INFO)["Body"].read())
+    except:
+        return None
+    return viewers.get(viewer)
+
+@st.cache_data
+def viewer_login(viewer:str, password:str):
+    viewer_info = get_viewer_info(viewer)
+
+    if not viewer_info:
+        return "VIEWER NOT FOUND"
+    if hash(password) != viewer_info.get("password"):
+        return "INCORRECT PASSWORD"
+    
+    st.session_state.account_info = get_admin_info(viewer_info.get("admin"))     
 
 def st_oauth(account_info, service="dbx") -> None:
     oauth2 = OAuth2Component(**get_st_auth_args(service))
