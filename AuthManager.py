@@ -267,6 +267,7 @@ def create_admin(info):
 def update_admin(info:dict) -> None:
     admins = json.loads(s3.get_object(Bucket=BUCKET, Key=ADMINS_INFO)["Body"].read())
     admins[info.get("username")] = info
+    st.session_state.account_info = info
     s3.put_object(Bucket=BUCKET, Key=ADMINS_INFO, Body=json.dumps(admins))
 
 @st.cache_data
@@ -285,6 +286,9 @@ def admin_login(admin:str, password:str):
         return "ADMIN NOT FOUND"
     if hash(password) != admin_info.get("password"):
         return "INCORRECT PASSWORD"
+    
+    for service in ["dbx", "google"]:
+        st_oauth(admin_info, service)
 
     st.session_state.account_info = admin_info
 
@@ -310,6 +314,9 @@ def viewer_login(viewer:str, password:str):
 def st_oauth(account_info, service="dbx") -> None:
     oauth2 = OAuth2Component(**get_st_auth_args(service))
     scopes = "" if service == "dbx" else GOOGLE_SCOPES
+    if account_info.get(f"{service}_token"):
+        oauth2.refresh_token(account_info.get(f"{service}_token"))
+        return None
 
     if service == "dbx":
         msg = "AUTHORIZE DROPBOX"
