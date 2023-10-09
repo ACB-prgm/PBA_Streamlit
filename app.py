@@ -172,15 +172,14 @@ def log_in():
                             st.experimental_rerun()
         elif st.session_state["create_form_complete"] == 1:
             account_info = st.session_state["account_info"]
-            if not st.session_state.get("dbx_authorized"):
-                AuthManager.st_oauth(account_info)
-            elif not st.session_state.get("google_authorized"):
-                AuthManager.st_oauth(account_info, "google")
+            if not st.session_state.get("dbx_auth_token_info"):
+                AuthManager.authorize(account_info)
+            elif not st.session_state.get("google_auth_token_info"):
+                AuthManager.authorize(account_info, "google")
             else:
                 st.session_state["logged_in"] = True
                 st.experimental_rerun()
                     
-
 
 if st.session_state.get("logged_in"):
     main()

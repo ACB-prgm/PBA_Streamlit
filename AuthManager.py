@@ -1,15 +1,21 @@
-from streamlit_oauth import OAuth2Component
 from urllib.parse import urlencode
 import streamlit as st
+import webbrowser
 import requests
 import gspread
 import hashlib
 import base64
 import boto3
 import json
+import uuid
+import time
 import os
 
 
+AUTH_API_URL = "https://opalescent-agate-lemon.glitch.me"
+AUTH_API_STORE_ENDPOINT = os.path.join(AUTH_API_URL, "auth/store")
+AUTH_API_LOGIN_ENDPOINT = os.path.join(AUTH_API_URL, "auth/login/")
+AUTH_API_CHECK_ENDPOINT = os.path.join(AUTH_API_URL, "auth/check/")
 DBX_CHECK_TOKEN_URL = "https://api.dropboxapi.com/2/check/user"
 GOOGLE_CHECK_TOKEN_URL = "https://www.googleapis.com/oauth2/v1/tokeninfo"
 
@@ -25,6 +31,7 @@ VIEWERS_INFO = "viewers_info.json"
 
 GOOGLE_SCOPES = "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive"
 
+
 if st.secrets.get("PRODUCTION"):
     os.environ["AWS_ACCESS_KEY_ID"] = st.secrets["AWS_ID"]
     os.environ["AWS_SECRET_ACCESS_KEY"] = st.secrets["AWS_SECRET"]
@@ -33,6 +40,8 @@ else:
     APP_URL = "http://localhost:8501"
 
 s3 = boto3.client("s3")
+
+requests.get(AUTH_API_URL) # Ping the server to make sure it is awake
 
 
 def dbx_auth_url() -> str:
@@ -73,13 +82,13 @@ def dbx_token_valid() -> bool:
         # Token is invalid or expired
         return False
 
-def refresh_dbx_token() -> bool:
-    if not os.environ.get("dbx_refresh_token"):
+def refresh_dbx_token(account_info) -> bool:
+    if not account_info.get("dbx_refresh_token"):
         return False
     secrets = get_dbx_secrets()
     data = {
         'grant_type' : 'refresh_token',
-        'refresh_token' : os.environ["dbx_refresh_token"],
+        'refresh_token' : account_info["dbx_refresh_token"],
     }
     # Prepare the headers
     auth = base64.b64encode(f"{secrets['client_id']}:{secrets['client_secret']}".encode()).decode()
@@ -90,7 +99,9 @@ def refresh_dbx_token() -> bool:
 
     # Check the response
     if response.status_code == 200:
-        update_s3_tokens("dbx", response.json())
+        print("refresh")
+        print(response.json())
+        account_info["dbx_auth_token"] = response.json()
         return True
     else:
         print(f"Request failed with status {response.status_code}")
@@ -105,64 +116,36 @@ def google_token_valid() -> bool:
     else:
         return False
 
-def refresh_google_token() -> bool:
+def refresh_google_token(account_info) -> bool:
+    if not account_info.get("google_refresh_token"):
+        return False
     secrets = get_google_secrets()
 
     data = {
     'client_id': secrets["client_id"],
     'client_secret': secrets["client_secret"],
-    'refresh_token': os.environ["google_refresh_token"],
+    'refresh_token': account_info["google_refresh_token"],
     'grant_type': 'refresh_token',
     }
 
     response = requests.post('https://oauth2.googleapis.com/token', data=data)
     if response.status_code == 200:
-        update_s3_tokens("google", response.json())
+        print("refresh")
+        print(response.json())
+        account_info["google_auth_token"] = response.json()
         return True
     else:
         return False
 
+@st.cache_data
 def get_google_secrets() -> dict:
     secrets = json.loads(s3.get_object(Bucket=BUCKET, Key=GOOGLE_OAUTH_SECRETS)["Body"].read())["web"]
     return secrets
 
+@st.cache_data
 def get_dbx_secrets() -> dict:
     secrets = json.loads(s3.get_object(Bucket=BUCKET, Key=DBX_OAUTH_SECRETS)["Body"].read())
     return secrets
-
-def get_s3_tokens(service):
-    if service == "dbx":
-        key = DBX_TOKENS
-    elif service == "google":
-        key = GOOGLE_TOKENS
-
-    try:
-        tokens = json.loads(s3.get_object(Bucket=BUCKET, Key=key)["Body"].read())
-    except:
-        tokens = {"access_token":"", "refresh_token":""}
-
-    return tokens
-
-def update_s3_tokens(service, response):
-    s3_tokens = get_s3_tokens(service)
-
-    for token in ["access_token", "refresh_token"]:
-        if response.get(token):
-            os.environ["%s_%s" % (service, token)] = response[token]
-            s3_tokens[token] = response[token]
-    
-    if service == "dbx":
-        key = DBX_TOKENS
-    elif service == "google":
-        key = GOOGLE_TOKENS
-    
-    s3.put_object(Bucket=BUCKET, Key=key, Body=json.dumps(s3_tokens))
-
-def populate_environ_tokens() -> None:
-    for service in ["dbx", "google"]:
-        tokens = get_s3_tokens(service)
-        for token in ["access_token", "refresh_token"]:
-            os.environ["%s_%s" % (service, token)] = tokens[token]
 
 def upload_dfs_to_google_sheet(dfs:dict, sheet_name:str):
     gc = create_gspread_client()
@@ -188,7 +171,11 @@ def upload_dfs_to_google_sheet(dfs:dict, sheet_name:str):
 
     # sheet.share(share_email, "user", "writer", notify=False)
 
-def create_gspread_client():
+def create_gspread_client(account_info):
+    if not account_info.get("google_refresh_token"):
+        print("ACCOUNT DOES NOT HAVE A REFRESH TOKEN")
+        raise(NotImplementedError)
+
     secrets = get_google_secrets()
     auth_user = {
         "refresh_token": os.environ.get("google_refresh_token"),
@@ -216,19 +203,27 @@ def update_dbx_link(link) -> None:
     os.environ["dbx_link"] = link
     s3.put_object(Bucket=BUCKET, Key=DBX_LINK, Body=link)
 
-def get_st_auth_args(service="dbx") -> dict:
+@st.cache_data
+def get_auth_api_params(account_info, service="dbx") -> dict:
     if service == "dbx":
         secrets = get_dbx_secrets()
     else:
         secrets = get_google_secrets()
     
     return {
-        "client_id" : secrets["client_id"],
-        "client_secret" : secrets["client_secret"],
-        "authroize_endpoint" : secrets["auth_uri"],
-        "token_endpoint" : secrets["token_uri"],
-        "refresh_token_endpoint" : secrets["token_uri"],
-        "revoke_token_endpoint" : secrets["token_uri"]
+        "auth_uri" : secrets["auth_uri"],
+        "token_uri" : secrets["token_uri"],
+        "auth_params" : {
+            "client_id" : secrets["client_id"],
+            'response_type': 'code',
+            'force_reapprove': 'true',
+            'token_access_type' : 'offline',
+            'state' : account_info["ID"]
+        },
+        "token_params" : {
+            "client_id" : secrets["client_id"],
+            "client_secret" : secrets["client_secret"]
+        }
     }
 
 @st.cache_data
@@ -253,6 +248,7 @@ def create_admin(info):
     else:
         info["password"] = hash(info.get("password"))
         info["viewer_password"] = hash(info.get("viewer_password"))
+        info["ID"] = str(uuid.uuid4())
         admins[info.get("username")] = info
         viewers[info.get("viewer")] = {
             "password" : info.get("viewer_password"),
@@ -288,7 +284,7 @@ def admin_login(admin:str, password:str):
         return "INCORRECT PASSWORD"
     
     for service in ["dbx", "google"]:
-        st_oauth(admin_info, service)
+        authorize(admin_info, service)
 
     st.session_state.account_info = admin_info
 
@@ -311,22 +307,49 @@ def viewer_login(viewer:str, password:str):
     
     st.session_state.account_info = get_admin_info(viewer_info.get("admin"))     
 
-def st_oauth(account_info, service="dbx") -> None:
-    oauth2 = OAuth2Component(**get_st_auth_args(service))
-    scopes = "" if service == "dbx" else GOOGLE_SCOPES
-    if account_info.get(f"{service}_token"):
-        oauth2.refresh_token(account_info.get(f"{service}_token"))
-        return None
-
-    if service == "dbx":
-        msg = "AUTHORIZE DROPBOX"
-    else:
-        msg = "AUTHORIZE GOOGLE DRIVE"
-    result = oauth2.authorize_button(msg, APP_URL, scopes)
-
-    if result and result.get("token"):
-        token = result.get('token')
-        account_info[f"{service}_token"] = token
-        st.session_state[f"{service}_authorized"] = True
-        update_admin(account_info)
+def authorize(account_info, service="dbx"):
+    if not st.session_state.get("auth_state"):
+        st.session_state["auth_state"] = 0
+    
+    if st.session_state["auth_state"] == 0:
+        response = requests.put(
+            AUTH_API_STORE_ENDPOINT,
+            json=get_auth_api_params(account_info, service)
+        )
+        webbrowser.open_new_tab(AUTH_API_LOGIN_ENDPOINT + account_info["ID"])
+        st.session_state["auth_state"] = 1
+        time.sleep(4)
+        print("initial rerun")
         st.experimental_rerun()
+    elif st.session_state["auth_state"] == 1:
+        response =requests.get(AUTH_API_CHECK_ENDPOINT + account_info["ID"])
+        if response.status_code == 200:
+            st.session_state["auth_state"] = 0
+            st.session_state[f"{service}_auth_token_info"] = response.json()
+            st.experimental_rerun()
+        elif response.status_code == 201:
+            time.sleep(1)
+            print("rerun")
+            st.experimental_rerun()
+        else:
+            print(response.text)    
+
+
+# def st_oauth(account_info, service="dbx") -> None:
+#     scopes = "" if service == "dbx" else GOOGLE_SCOPES
+#     if account_info.get(f"{service}_token"):
+#         oauth2.refresh_token(account_info.get(f"{service}_token"))
+#         return None
+
+#     if service == "dbx":
+#         msg = "AUTHORIZE DROPBOX"
+#     else:
+#         msg = "AUTHORIZE GOOGLE DRIVE"
+#     result = oauth2.authorize_button(msg, APP_URL, scopes)
+
+#     if result and result.get("token"):
+#         token = result.get('token')
+#         account_info[f"{service}_token"] = token
+#         st.session_state[f"{service}_authorized"] = True
+#         update_admin(account_info)
+#         st.experimental_rerun()
