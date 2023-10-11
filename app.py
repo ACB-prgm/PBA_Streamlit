@@ -12,9 +12,6 @@ import os
 st.set_page_config('626 Buget Analysis', page_icon=":chart_with_upwards_trend:", layout="wide")
 st.markdown(theme.FONT_CHANGE_CSS, unsafe_allow_html=True)
 
-ADMIN_NAME = ""
-ADMIN_PASS = ""
-PASSWORD = ""
 
 def main():
     # ALL PAGES —————————————————————————————————————————————————————————————————————————————————

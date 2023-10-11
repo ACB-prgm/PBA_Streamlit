@@ -31,7 +31,6 @@ VIEWERS_INFO = "viewers_info.json"
 
 GOOGLE_SCOPES = "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive"
 
-
 if st.secrets.get("PRODUCTION"):
     os.environ["AWS_ACCESS_KEY_ID"] = st.secrets["AWS_ID"]
     os.environ["AWS_SECRET_ACCESS_KEY"] = st.secrets["AWS_SECRET"]
@@ -44,32 +43,10 @@ s3 = boto3.client("s3")
 requests.get(AUTH_API_URL) # Ping the server to make sure it is awake
 
 
-def dbx_auth_url() -> str:
-    # Redirect the user to the Dropbox authorization URL
-    secrets = get_dbx_secrets()
-    params = {
-        'response_type': 'code',
-        'client_id': secrets["client_id"],
-        'redirect_uri': secrets["redirect_uri"],
-        'force_reapprove': 'true',
-        'token_access_type' : 'offline'
-    }
-    return f"{secrets['auth_uri']}?{urlencode(params)}"
-
-def google_auth_url() -> str:
-    gsecrets = get_google_secrets()
-    params = {
-        "client_id" : gsecrets["client_id"],
-        "redirect_uri" : gsecrets["redirect_uri"],
-        "response_type" : "code",
-        "scope" : " ".join(GOOGLE_SCOPES),
-        "access_type" : "offline"
-    }
-    return f"{gsecrets['auth_uri']}?{urlencode(params)}"
-
-def dbx_token_valid() -> bool:
+@st.cache_data
+def dbx_token_valid(token) -> bool:
     headers = {
-        'Authorization': f'Bearer {os.environ.get("dbx_access_token")}',
+        'Authorization': f'Bearer {token}',
         "Content-Type": "application/json",
     }
     data = {'query':'user'}
@@ -82,13 +59,12 @@ def dbx_token_valid() -> bool:
         # Token is invalid or expired
         return False
 
-def refresh_dbx_token(account_info) -> bool:
-    if not account_info.get("dbx_refresh_token"):
-        return False
+@st.cache_data
+def refresh_dbx_token(refresh_token) -> bool:
     secrets = get_dbx_secrets()
     data = {
         'grant_type' : 'refresh_token',
-        'refresh_token' : account_info["dbx_refresh_token"],
+        'refresh_token' : refresh_token,
     }
     # Prepare the headers
     auth = base64.b64encode(f"{secrets['client_id']}:{secrets['client_secret']}".encode()).decode()
@@ -99,40 +75,17 @@ def refresh_dbx_token(account_info) -> bool:
 
     # Check the response
     if response.status_code == 200:
-        print("refresh")
-        print(response.json())
-        account_info["dbx_auth_token"] = response.json()
+        st.session_state["dbx_auth_token_info"] = response.json()
         return True
     else:
         print(f"Request failed with status {response.status_code}")
         return False
 
-def google_token_valid() -> bool:
-    token = os.environ.get("google_access_token")
+@st.cache_data
+def google_token_valid(token) -> bool:
     response = requests.get('{}?access_token={}'.format(GOOGLE_CHECK_TOKEN_URL, token))
 
     if response.status_code == 200:
-        return True
-    else:
-        return False
-
-def refresh_google_token(account_info) -> bool:
-    if not account_info.get("google_refresh_token"):
-        return False
-    secrets = get_google_secrets()
-
-    data = {
-    'client_id': secrets["client_id"],
-    'client_secret': secrets["client_secret"],
-    'refresh_token': account_info["google_refresh_token"],
-    'grant_type': 'refresh_token',
-    }
-
-    response = requests.post('https://oauth2.googleapis.com/token', data=data)
-    if response.status_code == 200:
-        print("refresh")
-        print(response.json())
-        account_info["google_auth_token"] = response.json()
         return True
     else:
         return False
@@ -210,7 +163,7 @@ def get_auth_api_params(account_info, service="dbx") -> dict:
     else:
         secrets = get_google_secrets()
     
-    return {
+    params = {
         "auth_uri" : secrets["auth_uri"],
         "token_uri" : secrets["token_uri"],
         "auth_params" : {
@@ -225,6 +178,11 @@ def get_auth_api_params(account_info, service="dbx") -> dict:
             "client_secret" : secrets["client_secret"]
         }
     }
+
+    if service == "google":
+        params["auth_params"]["scope"] = GOOGLE_SCOPES
+    
+    return params
 
 @st.cache_data
 def hash(input_string:str) -> str:
@@ -274,6 +232,21 @@ def get_admin_info(admin:str) -> dict:
         return None
     return admins.get(admin)
 
+def login(account_info, service="dbx"):
+    # DBX FLOW
+    token_info = st.session_state.get(f"{service}_auth_token_info") or {}
+    token_valid = globals()[f"{service}_token_valid"](token_info.get("access_token"))
+
+    if token_valid:
+        return
+    elif token_info.get("refresh_token") and not token_valid:
+        success = globals()[f"refresh_{service}_token"](token_info.get("refresh_token"))
+        if not success:
+            authorize(account_info, service)
+    else:
+        authorize(account_info, service)
+
+
 @st.cache_data
 def admin_login(admin:str, password:str):
     admin_info = get_admin_info(admin)
@@ -284,9 +257,13 @@ def admin_login(admin:str, password:str):
         return "INCORRECT PASSWORD"
     
     for service in ["dbx", "google"]:
-        authorize(admin_info, service)
-
-    st.session_state.account_info = admin_info
+        if st.session_state.get(f"{service}_auth_token_info"):
+            admin_info[f"{service}_auth_token_info"] = st.session_state[f"{service}_auth_token_info"]
+        else:
+            login(admin_info, service)
+    
+    update_admin(admin_info)
+    st.session_state["account_info"] = admin_info
 
 @st.cache_data
 def get_viewer_info(viewer:str) -> dict:
@@ -319,7 +296,6 @@ def authorize(account_info, service="dbx"):
         webbrowser.open_new_tab(AUTH_API_LOGIN_ENDPOINT + account_info["ID"])
         st.session_state["auth_state"] = 1
         time.sleep(4)
-        print("initial rerun")
         st.experimental_rerun()
     elif st.session_state["auth_state"] == 1:
         response =requests.get(AUTH_API_CHECK_ENDPOINT + account_info["ID"])
@@ -329,11 +305,9 @@ def authorize(account_info, service="dbx"):
             st.experimental_rerun()
         elif response.status_code == 201:
             time.sleep(1)
-            print("rerun")
             st.experimental_rerun()
         else:
             print(response.text)    
-
 
 # def st_oauth(account_info, service="dbx") -> None:
 #     scopes = "" if service == "dbx" else GOOGLE_SCOPES
