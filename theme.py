@@ -42,8 +42,9 @@ GREEN_RGBA = html_to_rgba(GREEN)
 # OTHER ———————————————————————————————————————————————————————————————————————————————————————————————————
 FONT_CHANGE_CSS = '<style>html, body, [class*="css"] {font-family: helvetica, sans-serif;}</style>'
 
-logo_img = "https://github.com/querybila/Automating-ChatGPT-with-Python-and-Selenium/assets/63984796/f3e20841-af08-4139-b686-200a7bccb783"
-stamp_img = "https://github.com/querybila/Automating-ChatGPT-with-Python-and-Selenium/assets/63984796/1f833bde-8bc8-47fb-b1b6-9a6a8c1f294f"
+# Brand Assets: https://www.dropbox.com/sh/cg533fydy6228t0/AADuyG_xtVpmbiTwviwHwPYYa?dl=0
+logo_img = "https://github.com/ACB-prgm/PBA_Streamlit/assets/63984796/667390de-aed6-430e-b57b-9920e4c1715d"
+stamp_img = "https://github.com/ACB-prgm/PBA_Streamlit/assets/63984796/399fecc3-4b79-4688-be25-9473d4c00ff9"
 
 # PLOTLY ———————————————————————————————————————————————————————————————————————————————————————————————————
 PLOTLY_TEMPLATE = dict(

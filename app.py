@@ -8,6 +8,11 @@ import theme
 import time
 import os
 
+# TODO
+# Make page to enter drobox link
+# Update load data function to use dropbox link
+# Update view process to create a key for admin to share for each viewer, allowing them to make an account linked to that key
+# Add loading screen for DBXreader and startup
 
 st.set_page_config('626 Buget Analysis', page_icon=":chart_with_upwards_trend:", layout="wide")
 st.markdown(theme.FONT_CHANGE_CSS, unsafe_allow_html=True)
@@ -22,6 +27,7 @@ def main():
     if reset or not st.session_state.get("session"):
         data_cache_key = st.session_state.get("data_cache_key")
         logged_in = st.session_state.get("logged_in")
+        act_info = st.session_state.get("account_info")
 
         st.session_state.clear()
         session = str(time.time())
@@ -29,6 +35,7 @@ def main():
 
         st.session_state["data_cache_key"] = data_cache_key
         st.session_state["logged_in"] = logged_in
+        st.session_state["account_info"] = act_info
     else:
         session = st.session_state.session
 
@@ -177,6 +184,7 @@ def log_in():
                 for service in ["dbx", "google"]:
                     account_info[f"{service}_auth_token_info"] = st.session_state[f"{service}_auth_token_info"]
                 AuthManager.update_admin(account_info)
+                st.session_state["account_info"] = account_info
                 st.session_state["logged_in"] = True
                 st.experimental_rerun()
                     

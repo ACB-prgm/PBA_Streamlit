@@ -3,6 +3,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import streamlit as st
 import pandas as pd
+import AuthManager
 import theme
 import time
 
@@ -115,17 +116,30 @@ def st_df(df:pd.DataFrame, keep_percent=False, highlight_text=False, editable=Fa
 def home():
     add_v_space(2)
     st.image(theme.logo_img)
-    with st.empty():
+    with st.container():
         cols = st.columns(3)
         with cols[1]:
             st.markdown("### PRODUCTION BUDGET ANALYSIS")
-    
-    refresh = st.button("REFRESH DATA")
-    if refresh:
-        st.session_state["data_cache_key"] = str(time.time())
-        st.experimental_rerun()
+        add_v_space(2)
+
+        dbx_link = st.session_state["account_info"].get("dbx_link", "")
+        dbx_link_entry = st.text_input(
+            "DROPBOX LINK:",
+            dbx_link,
+            placeholder="eg. https://www.dropbox.com/home/_JOB_ACTUALS"
+            )
+        if dbx_link_entry != dbx_link:
+            st.session_state["account_info"]["dbx_link"] = dbx_link_entry
+            AuthManager.update_admin(st.session_state["account_info"])
+            st.experimental_rerun()
+
+        if dbx_link_entry:
+            refresh = st.button("REFRESH DATA")
+            if refresh:
+                st.session_state["data_cache_key"] = str(time.time())
+                st.experimental_rerun()
             
-    add_v_space(8)
+    add_v_space(2)
     with st.empty():
         cols = st.columns(3)
         with cols[-1]:

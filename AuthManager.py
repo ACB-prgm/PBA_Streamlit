@@ -233,8 +233,7 @@ def get_admin_info(admin:str) -> dict:
     return admins.get(admin)
 
 def login(account_info, service="dbx"):
-    # DBX FLOW
-    token_info = st.session_state.get(f"{service}_auth_token_info") or {}
+    token_info = account_info.get(f"{service}_auth_token_info") or st.session_state.get(f"{service}_auth_token_info") or {}
     token_valid = globals()[f"{service}_token_valid"](token_info.get("access_token"))
 
     if token_valid:
@@ -250,7 +249,7 @@ def login(account_info, service="dbx"):
 @st.cache_data
 def admin_login(admin:str, password:str):
     admin_info = get_admin_info(admin)
-
+    
     if not admin_info:
         return "ADMIN NOT FOUND"
     if hash(password) != admin_info.get("password"):
