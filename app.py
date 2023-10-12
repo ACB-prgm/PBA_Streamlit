@@ -174,6 +174,9 @@ def log_in():
             elif not st.session_state.get("google_auth_token_info"):
                 AuthManager.authorize(account_info, "google")
             else:
+                for service in ["dbx", "google"]:
+                    account_info[f"{service}_auth_token_info"] = st.session_state[f"{service}_auth_token_info"]
+                AuthManager.update_admin(account_info)
                 st.session_state["logged_in"] = True
                 st.experimental_rerun()
                     
