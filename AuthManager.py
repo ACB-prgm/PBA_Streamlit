@@ -83,7 +83,7 @@ def refresh_dbx_token(refresh_token) -> bool:
 
 @st.cache_data
 def google_token_valid(token) -> bool:
-    response = requests.get('{}?access_token={}'.format(GOOGLE_CHECK_TOKEN_URL, token))
+    response = requests.get(GOOGLE_CHECK_TOKEN_URL, params={'access_token': token})
 
     if response.status_code == 200:
         return True
@@ -217,14 +217,12 @@ def create_admin(info):
     s3.put_object(Bucket=BUCKET, Key=ADMINS_INFO, Body=json.dumps(admins))
     s3.put_object(Bucket=BUCKET, Key=VIEWERS_INFO, Body=json.dumps(viewers))
 
-@st.cache_data
 def update_admin(info:dict) -> None:
     admins = json.loads(s3.get_object(Bucket=BUCKET, Key=ADMINS_INFO)["Body"].read())
     admins[info.get("username")] = info
     st.session_state.account_info = info
     s3.put_object(Bucket=BUCKET, Key=ADMINS_INFO, Body=json.dumps(admins))
 
-@st.cache_data
 def get_admin_info(admin:str) -> dict:
     try:
         admins = json.loads(s3.get_object(Bucket=BUCKET, Key=ADMINS_INFO)["Body"].read())
@@ -245,8 +243,6 @@ def login(account_info, service="dbx"):
     else:
         authorize(account_info, service)
 
-
-@st.cache_data
 def admin_login(admin:str, password:str):
     admin_info = get_admin_info(admin)
     

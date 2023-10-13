@@ -9,7 +9,6 @@ import time
 import os
 
 # TODO
-# Make page to enter drobox link
 # Update load data function to use dropbox link
 # Update view process to create a key for admin to share for each viewer, allowing them to make an account linked to that key
 # Add loading screen for DBXreader and startup
@@ -56,46 +55,46 @@ def main():
 
         return CSSS, PO, PR
 
-    CSSS, PO, PR = load_data(st.session_state.get("data_cache_key"))
+    if st.session_state["account_info"].get("dbx_link"):
+        CSSS, PO, PR = load_data(st.session_state.get("data_cache_key"))
 
+        with st.container():
+            cols = st.columns(4)
+            with cols[0]:
+                sel_sections = st.multiselect("SECTIONS", CSSS["SECTION"].unique(), key="s_" + session)
+            with cols[1]:
+                sel_projects = st.multiselect("PROJECTS", CSSS["PROJECT NAME"].unique(), key="p_" + session)
+            with cols[2]:
+                start_date = st.date_input('START DATE', CSSS.DATE.min(), key="sd_" + session)
+            with cols[3]:
+                end_date = st.date_input('END DATE', CSSS.DATE.max(), key="ed_" + session)
 
-    with st.container():
-        cols = st.columns(4)
-        with cols[0]:
-            sel_sections = st.multiselect("SECTIONS", CSSS["SECTION"].unique(), key="s_" + session)
-        with cols[1]:
-            sel_projects = st.multiselect("PROJECTS", CSSS["PROJECT NAME"].unique(), key="p_" + session)
-        with cols[2]:
-            start_date = st.date_input('START DATE', CSSS.DATE.min(), key="sd_" + session)
-        with cols[3]:
-            end_date = st.date_input('END DATE', CSSS.DATE.max(), key="ed_" + session)
+        for df in [CSSS, PO]:
+            if sel_sections:
+                drop_indices = df[~df["SECTION"].isin(sel_sections)].index
+                df.drop(drop_indices, inplace=True)
+            if sel_projects:
+                drop_indices = df[~df["PROJECT NAME"].isin(sel_projects)].index
+                df.drop(drop_indices, inplace=True)
+            if start_date < end_date:
+                drop_indices = df[~((df['DATE'] > start_date) & (df['DATE'] < end_date))].index
+                df.drop(drop_indices, inplace=True)
+            elif start_date == end_date:
+                pass
+            else:
+                st.error('Error: End date must fall after start date.')
 
-    for df in [CSSS, PO]:
-        if sel_sections:
-            drop_indices = df[~df["SECTION"].isin(sel_sections)].index
-            df.drop(drop_indices, inplace=True)
-        if sel_projects:
-            drop_indices = df[~df["PROJECT NAME"].isin(sel_projects)].index
-            df.drop(drop_indices, inplace=True)
-        if start_date < end_date:
-            drop_indices = df[~((df['DATE'] > start_date) & (df['DATE'] < end_date))].index
-            df.drop(drop_indices, inplace=True)
-        elif start_date == end_date:
-            pass
-        else:
-            st.error('Error: End date must fall after start date.')
-
-
-
-    # PAGE SPECIFFIC —————————————————————————————————————————————————————————————————————————————————
-    pages = [
-        "HOME",
-        "COST SUMMARY",
-        "COST SUMMARY TABLE VIEW",
-        "COST SUMMARY OVER TIME",
-        "PURCHASE ORDER LOGS",
-        "PAYROLL"
-    ]
+        # PAGE SPECIFFIC —————————————————————————————————————————————————————————————————————————————————
+        pages = [
+            "HOME",
+            "COST SUMMARY",
+            "COST SUMMARY TABLE VIEW",
+            "COST SUMMARY OVER TIME",
+            "PURCHASE ORDER LOGS",
+            "PAYROLL"
+        ]
+    else:
+        pages = ["HOME"]
 
     with st.sidebar:
         selected_page = option_menu(
@@ -128,6 +127,7 @@ def log_in():
             form_complete = attempt[0] != "" and attempt[1] != ""
             if st.form_submit_button("LOG IN AS ADMIN") and form_complete or form_complete:
                 ERR = AuthManager.admin_login(attempt[0], attempt[1])
+                
                 if ERR:
                     st.write(ERR)
                 else:
