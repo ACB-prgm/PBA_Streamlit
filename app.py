@@ -4,6 +4,8 @@ import streamlit as st
 import pandas as pd
 import AuthManager
 import subprocess
+import DBXReader
+import dropbox
 import theme
 import time
 import os
@@ -40,6 +42,13 @@ def main():
 
     @st.cache_data
     def load_data(cache_key):
+        act_info = st.session_state["account_info"]
+        dbx_token = act_info["dbx_auth_token_info"]["access_token"]
+
+        dbx = dropbox.Dropbox(dbx_token)
+        dbx_reader = DBXReader.DbxDataRetriever(act_info["dbx_link"], dbx)
+        dbx_reader.create_datasets()
+
         CSSS = pd.read_excel("626_budget_analysis.xlsx", sheet_name="CSSS")
         CSSS.DATE = pd.to_datetime(CSSS.DATE).dt.date
         # TEMP MITIGATION FOR VARIANCE ISSUE
