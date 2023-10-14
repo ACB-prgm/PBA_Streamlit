@@ -11,7 +11,6 @@ import time
 import os
 
 # TODO
-# Update load data function to use dropbox link
 # Update view process to create a key for admin to share for each viewer, allowing them to make an account linked to that key
 # Add loading screen for DBXreader and startup
 
@@ -48,19 +47,16 @@ def main():
         dbx = dropbox.Dropbox(dbx_token)
         dbx_reader = DBXReader.DbxDataRetriever(act_info["dbx_link"], dbx)
         dbx_reader.create_datasets()
+        
+        datasets = dbx_reader.datasets
 
-        CSSS = pd.read_excel("626_budget_analysis.xlsx", sheet_name="CSSS")
-        CSSS.DATE = pd.to_datetime(CSSS.DATE).dt.date
-        # TEMP MITIGATION FOR VARIANCE ISSUE
-        CSSS["VARIANCE (%)"] = ((CSSS["ACTUAL"] - CSSS["ESTIMATE"]) / CSSS["ESTIMATE"]) * 100
-        CSSS["VARIANCE (%)"] = CSSS["VARIANCE (%)"].apply(lambda x: -100 if x < -100 else (100 if x > 100 else x))
+        CSSS = datasets.get("CSSS")
+        PO = datasets.get("PO")
+        PR = datasets.get("PR")
 
-        PO = pd.read_excel("626_budget_analysis.xlsx", sheet_name="PO") 
-        PO.DATE = pd.to_datetime(PO.DATE).dt.date
-
-        PR = pd.read_excel("626_budget_analysis.xlsx", sheet_name="PR") 
-        PR["VARIANCE (%)"] = ((PR["ACTUAL"] - PR["EST"]) / PR["EST"]) * 100
-        PR["VARIANCE (%)"] = PR["VARIANCE (%)"].apply(lambda x: -100 if x < -100 else (100 if x > 100 else x))
+        for df in [CSSS, PO, PR]:
+            if "DATE" in df.columns:
+                df.DATE = pd.to_datetime(df.DATE).dt.date
 
         return CSSS, PO, PR
 

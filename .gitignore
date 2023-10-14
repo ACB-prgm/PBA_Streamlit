@@ -1,3 +1,5 @@
 pba_streamlit_venv
 pba_st_venv
 __pycache__/
+df_caches/
+dbx_retrieval_cache.pickle

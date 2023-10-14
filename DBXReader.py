@@ -20,6 +20,8 @@ def get_content(extension, file_obj):
         return pd.read_excel(file_obj).to_string()
     elif extension == ".xlsb":
         return pd.read_excel(file_obj, engine='pyxlsb').to_string()
+    elif extension == ".csv":
+        return pd.read_csv(file_obj).to_string()
     else:
         return None
 
@@ -66,18 +68,18 @@ def get_section_from_line(ln:int) -> str:
     
     return "OTHER"
 
-def find_outliers_iqr(SERIES, threshold=1.5):
-    q1 = SERIES.quantile(0.25)
-    q3 = SERIES.quantile(0.75)
-    iqr = q3 - q1
+# def find_outliers_iqr(SERIES, threshold=1.5):
+#     q1 = SERIES.quantile(0.25)
+#     q3 = SERIES.quantile(0.75)
+#     iqr = q3 - q1
 
-    cutoff = threshold * iqr
-    lower_bound = q1 - cutoff
-    upper_bound = q3 + cutoff
+#     cutoff = threshold * iqr
+#     lower_bound = q1 - cutoff
+#     upper_bound = q3 + cutoff
 
-    outliers = SERIES[(SERIES < lower_bound) | (SERIES > upper_bound)]
+#     outliers = SERIES[(SERIES < lower_bound) | (SERIES > upper_bound)]
 
-    return outliers
+#     return outliers
 
 def get_row_idx(_df:pd.DataFrame, key:str) -> int:
     try:
@@ -85,10 +87,10 @@ def get_row_idx(_df:pd.DataFrame, key:str) -> int:
     except ValueError:
         return 0
 
-def camelot_read_pdf_bytes(file_obj, table_num=0) -> pd.DataFrame:
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_pdf:
-        temp_pdf.write(file_obj)
-        return camelot.read_pdf(temp_pdf.name)._tables[table_num].df.copy()
+# def camelot_read_pdf_bytes(file_obj, table_num=0) -> pd.DataFrame:
+#     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_pdf:
+#         temp_pdf.write(file_obj)
+#         return camelot.read_pdf(temp_pdf.name)._tables[table_num].df.copy()
 
 def read_sheet(file_obj, extension:str) -> pd.DataFrame:
     if extension == ".xlsx":
@@ -123,23 +125,7 @@ def replaced(_list:list, idxs:list, values:list) -> list:
 
 # COST SUMMARY FUNCTIONS ————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
 def read_hot_budget_cs(file_obj, extension) -> pd.DataFrame:
-    if extension == ".pdf":
-        _df = camelot_read_pdf_bytes(file_obj, 1)
-        
-        _df.drop(12, inplace=True)
-
-        _df.columns = CONSTANTS.HB_CS_COLS
-        _df.drop(columns=["drop"], inplace=True)
-        _df = _df.loc[1:]
-
-        _df = _df.replace([r"CS\d+\b ", r".*\n", "\)"], "", regex=True).replace("\(", "-", regex=True)
-
-        _df[_df.columns[1:]] = _df.iloc[:, 1:].replace("", np.nan).apply(lambda x: x.str.replace(',', '')).astype(float)
-
-        _df = _df.dropna(thresh=2)
-
-        return _df.reset_index(drop=True)
-    elif extension == ".xlsx":
+    if extension == ".xlsx":
         _df = pd.read_excel(file_obj)
 
         date_pattern = r'[A-Za-z]+\s+\d{1,2},\s+\d{4}'
@@ -171,27 +157,27 @@ def read_hot_budget_cs(file_obj, extension) -> pd.DataFrame:
     else:
         return pd.DataFrame()
 
-def read_GetActual_cs(file_obj) -> pd.DataFrame:
-    reader = fitz.open(stream=file_obj)
-    content = reader.load_page(0).get_text()
+# def read_GetActual_cs(file_obj) -> pd.DataFrame:
+#     reader = fitz.open(stream=file_obj)
+#     content = reader.load_page(0).get_text()
 
-    start = re.search(r"\b[A-Z]\s", content[2:]).start()
-    content = re.sub(r"\b[A-Z]\s|Bid Actual|\,|\)", "", content.replace("(", "-"))
-    content = content[start:content.find("\nGRAND TOTAL")].split("\n")
-    _df = pd.DataFrame(columns=["SECTION", "BID TOTALS", "ACTUAL"])
+#     start = re.search(r"\b[A-Z]\s", content[2:]).start()
+#     content = re.sub(r"\b[A-Z]\s|Bid Actual|\,|\)", "", content.replace("(", "-"))
+#     content = content[start:content.find("\nGRAND TOTAL")].split("\n")
+#     _df = pd.DataFrame(columns=["SECTION", "BID TOTALS", "ACTUAL"])
     
-    for line in content:
-        vals = line.split("$")
-        if len(vals) > 1:
-            _df.loc[len(_df)] = vals[:3]
+#     for line in content:
+#         vals = line.split("$")
+#         if len(vals) > 1:
+#             _df.loc[len(_df)] = vals[:3]
 
-    _df[["BID TOTALS", "ACTUAL"]] = _df[["BID TOTALS", "ACTUAL"]].astype(float)
-    _df = _df.drop(_df[_df.SECTION.str.contains("SUB TOTAL")].index)
+#     _df[["BID TOTALS", "ACTUAL"]] = _df[["BID TOTALS", "ACTUAL"]].astype(float)
+#     _df = _df.drop(_df[_df.SECTION.str.contains("SUB TOTAL")].index)
 
-    _df["VARIANCE"] = _df["ACTUAL"] - _df["BID TOTALS"]
-    _df.SECTION = _df.SECTION.apply(str.strip)
+#     _df["VARIANCE"] = _df["ACTUAL"] - _df["BID TOTALS"]
+#     _df.SECTION = _df.SECTION.apply(str.strip)
 
-    return _df
+#     return _df
 
 def clean_SECTION(val:str) -> str:
     val = val.strip()
@@ -205,25 +191,25 @@ def clean_SECTION(val:str) -> str:
     
     return val.upper()
 
+def calc_pct_variance(var, actual) -> pd.Series:
+    actual = actual.copy()
+    return (var / actual.replace(0, np.nan).fillna(var)) * 100
+
+
 def read_cost_summary(file_obj, extension) -> pd.DataFrame:
     content = get_content(extension, file_obj)
     
     if "ESTIMATED COST SUMMARY" in content:
         _df = read_hot_budget_cs(file_obj, extension)
-    elif "Film Production Cost Summary" in content:
-        _df = read_GetActual_cs(file_obj)
+    # elif "Film Production Cost Summary" in content:
+    #     _df = read_GetActual_cs(file_obj)
     else:
         return pd.DataFrame()
     
     _df.fillna(0, inplace=True)
     _df.SECTION = _df.SECTION.apply(clean_SECTION)
     
-    _df["VARIANCE (%)"] = _df["VARIANCE"] / (_df["BID TOTALS"] + 1E-5) * 100
-
-    for section in _df["SECTION"].unique():
-        section_df = _df[_df["SECTION"] == section]
-        outliers = find_outliers_iqr(section_df["VARIANCE (%)"])
-        _df.loc[outliers.index, "VARIANCE (%)"] = section_df["VARIANCE (%)"].median()
+    _df["VARIANCE (%)"] = calc_pct_variance(_df["VARIANCE"], _df["BID TOTALS"])
 
     return _df
 
@@ -244,7 +230,7 @@ def clean_xlsx_section_df(section_df, section) -> pd.DataFrame:
     
     section_df.insert(0, "SECTION", section)
     section_df["VARIANCE"] = section_df["ACTUAL"] - section_df["ESTIMATE"]
-    section_df["VARIANCE (%)"] = section_df["VARIANCE"] / (section_df["ESTIMATE"] + 1E-5)
+    section_df["VARIANCE (%)"] = calc_pct_variance(section_df["VARIANCE"], section_df["ESTIMATE"])
 
     return section_df
 
@@ -295,30 +281,30 @@ def clean_pdf_section_df(section_df) -> pd.DataFrame:
 
     section_df.insert(0, "SECTION", section)
     section_df["VARIANCE"] = section_df["ACTUAL"] - section_df["ESTIMATE"]
-    section_df["VARIANCE (%)"] = section_df["VARIANCE"] / (section_df["ESTIMATE"] + 1E-5)
+    section_df["VARIANCE (%)"] = calc_pct_variance(section_df["VARIANCE"], section_df["ESTIMATE"])
 
 
     return section_df
 
-def get_HB_pdf_section_dfs(cs, file_obj):
-    section_dfs = []
+# def get_HB_pdf_section_dfs(cs, file_obj):
+#     section_dfs = []
 
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_pdf:
-        temp_pdf.write(file_obj)
-        for page_num, table_nums in to_read(cs.SECTION.unique()).items():
-            for table in camelot.read_pdf(temp_pdf.name, pages=str(page_num))._tables:
-                if table.order in table_nums:
-                    section_dfs.append(clean_pdf_section_df(table.df))
+#     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_pdf:
+#         temp_pdf.write(file_obj)
+#         for page_num, table_nums in to_read(cs.SECTION.unique()).items():
+#             for table in camelot.read_pdf(temp_pdf.name, pages=str(page_num))._tables:
+#                 if table.order in table_nums:
+#                     section_dfs.append(clean_pdf_section_df(table.df))
 
-    return pd.concat(section_dfs, ignore_index=True)
+#     return pd.concat(section_dfs, ignore_index=True)
 
 def get_CS_section_dfs(cs, file_obj, extension) -> pd.DataFrame:
     section_dfs = None
 
     if "xlsx" in extension:
         section_dfs = get_HB_xlsx_secion_dfs(cs, file_obj)
-    elif "pdf" in extension:
-        section_dfs = get_HB_pdf_section_dfs(cs, file_obj)
+    # elif "pdf" in extension:
+    #     section_dfs = get_HB_pdf_section_dfs(cs, file_obj)
     else:
         return pd.DataFrame()
     
@@ -329,24 +315,22 @@ def get_CS_section_dfs(cs, file_obj, extension) -> pd.DataFrame:
 
 
 # PAYROLL FUNCTIONS —————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
-def read_pdf_payroll(file_obj) -> pd.DataFrame:
-    _df = camelot_read_pdf_bytes(file_obj, 0)
+# def read_pdf_payroll(file_obj) -> pd.DataFrame:
+#     _df = camelot_read_pdf_bytes(file_obj, 0)
     
-    _df.columns = CONSTANTS.PR_COLS
-    _df = _df.iloc[1:].reset_index(drop=True).replace("", np.nan).dropna(how="all")
+#     _df.columns = CONSTANTS.PR_COLS
+#     _df = _df.iloc[1:].reset_index(drop=True).replace("", np.nan).dropna(how="all")
 
-    _df.LINE.fillna(_df.PAYEE, inplace=True)
-    _df[['LINE', 'PAYEE']] = _df.LINE.str.split(" ", n=1, expand=True)
+#     _df.LINE.fillna(_df.PAYEE, inplace=True)
+#     _df[['LINE', 'PAYEE']] = _df.LINE.str.split(" ", n=1, expand=True)
 
-    _df = _df.replace(["\)", ","], "", regex=True).replace("\(", "-", regex=True)
-    _df.ACTUAL = _df.ACTUAL.astype(float)
+#     _df = _df.replace(["\)", ","], "", regex=True).replace("\(", "-", regex=True)
+#     _df.ACTUAL = _df.ACTUAL.astype(float)
 
-    return _df
+#     return _df
 
 def read_payroll(file_obj, extension) -> pd.DataFrame:
-    if extension == ".pdf":
-        _df = read_pdf_payroll(file_obj)
-    elif extension in [".xlsx", "xlsb"]:
+    if extension in [".xlsx", "xlsb"]:
         _df = read_sheet(file_obj, extension)
     else:
         return pd.DataFrame()
@@ -357,30 +341,30 @@ def read_payroll(file_obj, extension) -> pd.DataFrame:
 
     _df["EST"] = _df.RATE * _df.DAYS
     _df["VARIANCE"] = _df.ACTUAL - _df.EST
-    _df["VARIANCE (%)"] = _df.VARIANCE / _df.EST
+    _df["VARIANCE (%)"] = calc_pct_variance(_df["VARIANCE"], _df["EST"])
     _df["SECTION"] = _df.LINE.apply(get_section_from_line)
 
     return _df[["LINE", "SECTION", "PAYEE", "RATE", "EST", "ACTUAL", "VARIANCE", "VARIANCE (%)", "LINE DESCRIPTION"]].fillna(0.0)
 
 
 # PURCHASE ORDER LOG FUNCTIONS ——————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
-def read_pdf_purchase_order(file_obj) -> pd.DataFrame:
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_pdf:
-        temp_pdf.write(file_obj)
-        _df = camelot.read_pdf(temp_pdf.name)._tables[0].df.copy()
+# def read_pdf_purchase_order(file_obj) -> pd.DataFrame:
+#     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_pdf:
+#         temp_pdf.write(file_obj)
+#         _df = camelot.read_pdf(temp_pdf.name)._tables[0].df.copy()
     
-    _df.columns = CONSTANTS.PO_COLS
-    _df = _df.iloc[1:].reset_index(drop=True).replace("", np.nan).dropna(how="all")
+#     _df.columns = CONSTANTS.PO_COLS
+#     _df = _df.iloc[1:].reset_index(drop=True).replace("", np.nan).dropna(how="all")
 
-    _df.LINE.fillna(_df.PAYEE, inplace=True)
-    _df[['LINE', 'PAYEE']] = _df.LINE.str.split(" ", n=1, expand=True)
+#     _df.LINE.fillna(_df.PAYEE, inplace=True)
+#     _df[['LINE', 'PAYEE']] = _df.LINE.str.split(" ", n=1, expand=True)
 
-    _df.ACTUAL.fillna(_df["LINE DESCRIPTION"], inplace=True)
-    _df[['ACTUAL', 'LINE DESCRIPTION']] = _df.ACTUAL.str.split(" ", n=1, expand=True)
+#     _df.ACTUAL.fillna(_df["LINE DESCRIPTION"], inplace=True)
+#     _df[['ACTUAL', 'LINE DESCRIPTION']] = _df.ACTUAL.str.split(" ", n=1, expand=True)
 
-    _df = _df.replace(["\)", ","], "", regex=True).replace("\(", "-", regex=True)
+#     _df = _df.replace(["\)", ","], "", regex=True).replace("\(", "-", regex=True)
 
-    return _df
+#     return _df
 
 def clean_payee(payee) -> str:
     payee = payee.split("-")[0].lower()
@@ -401,9 +385,7 @@ def clean_payee(payee) -> str:
 
 def read_purchase_order(file_obj, extension) -> pd.DataFrame:
 
-    if extension == ".pdf":
-        _df = read_pdf_purchase_order(file_obj)
-    elif extension in [".xlsx", ".xlsb"]:
+    if extension in [".xlsx", ".xlsb"]:
         _df = read_sheet(file_obj, extension)
     else:
         return pd.DataFrame()
@@ -605,18 +587,18 @@ class DbxDataRetriever:
             if self.datasets.get(_type):
                 df = pd.concat(self.datasets[_type], ignore_index=True).reset_index(drop=True)
 
-                if _type in ["CS", "PR"]:
-                    for section in df["SECTION"].unique():
-                        section_df = df[df["SECTION"] == section]
-                        outliers = find_outliers_iqr(section_df["VARIANCE (%)"])
-                        df.loc[outliers.index, "VARIANCE (%)"] = section_df["VARIANCE (%)"].median()
-                elif _type == "CSSS":
-                    for section in df["SUB SECTION"].unique():
-                        section_df = df[df["SUB SECTION"] == section]
-                        outliers = find_outliers_iqr(section_df["VARIANCE (%)"])
-                        df.loc[outliers.index, "VARIANCE (%)"] = section_df["VARIANCE (%)"].median()
-                elif _type != "PO":
-                    df["VARIANCE (%)"] = df["VARIANCE (%)"].clip(upper=100)
+                # if _type in ["CS", "PR"]:
+                #     for section in df["SECTION"].unique():
+                #         section_df = df[df["SECTION"] == section]
+                #         outliers = find_outliers_iqr(section_df["VARIANCE (%)"])
+                #         df.loc[outliers.index, "VARIANCE (%)"] = section_df["VARIANCE (%)"].median()
+                # elif _type == "CSSS":
+                #     for section in df["SUB SECTION"].unique():
+                #         section_df = df[df["SUB SECTION"] == section]
+                #         outliers = find_outliers_iqr(section_df["VARIANCE (%)"])
+                #         df.loc[outliers.index, "VARIANCE (%)"] = section_df["VARIANCE (%)"].median()
+                # elif _type != "PO":
+                #     df["VARIANCE (%)"] = df["VARIANCE (%)"].clip(upper=100, lower=-100)
 
                 self.datasets[_type] = self.cache_df(df, _type)
             else:
@@ -666,8 +648,8 @@ class DbxDataRetriever:
                         csss["PROJECT NAME"] = project_name
                         self.datasets["CSSS"].append(csss)
 
+        projects = list(self.dbx_files.keys())
         if len(self.dbx_files.keys()) > self.chunk_size:
-            projects = list(self.dbx_files.keys())
             chunks = list(range(0, len(projects), 50)) + [len(projects)]
             for idx, chunk in enumerate(chunks[1:]):
                 start = chunks[idx]

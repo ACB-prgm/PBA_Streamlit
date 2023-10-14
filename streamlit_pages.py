@@ -1,4 +1,5 @@
 from streamlit_plotly_events import plotly_events
+from DBXReader import calc_pct_variance
 import plotly.graph_objects as go
 import plotly.express as px
 import streamlit as st
@@ -65,7 +66,7 @@ def highlight(row, to_highlight, color="#FFFFFF"):
 
 
 def highlight_with_opacity(val, var_pct):
-    opacity = max(round(abs(min(abs(var_pct), 100)) / 100.0, 2), .25)
+    opacity = min(round(abs(min(abs(var_pct), 100)) / 100.0, 2) + 0.25, 1.0)
     if val > 0:
         color = theme.RED_RGBA
     elif val < 0:
@@ -151,6 +152,7 @@ def cost_summary(CSSS):
 
     with st.container():
         df = CSSS.groupby("SECTION").mean(numeric_only=True).sort_values(by="VARIANCE", ascending=False)
+        df["VARIANCE (%)"] = calc_pct_variance(df.VARIANCE, df.ESTIMATE)
         
         cols = st.columns([0.3, 0.7])
         with cols[0]:
@@ -161,7 +163,7 @@ def cost_summary(CSSS):
                 if not check_df.empty:
                     highlight_text = True
             
-            st_df(display_df, use_container_width=True, highlight_text=highlight_text, height=550, hide_index=True)
+            st_df(display_df, keep_percent=True, use_container_width=True, highlight_text=highlight_text, height=550, hide_index=True)
         with cols[1]:
             if st.session_state.get("cs_sel_section"):
                 if not check_df.empty:
@@ -221,6 +223,7 @@ def cost_summary_table_view(CSSS:pd.DataFrame):
         # df_to_show['SECTION'] = df_to_show['SECTION'].mask(df_to_show['SECTION'].duplicated(), '')
     else:
         df_to_show = df_to_show.groupby("SECTION").mean(numeric_only=True).reset_index()
+        df_to_show["VARIANCE (%)"] = calc_pct_variance(df_to_show.VARIANCE, df_to_show.ESTIMATE)
 
     st_df(df_to_show, keep_percent=True, use_container_width=True, hide_index=True)
 

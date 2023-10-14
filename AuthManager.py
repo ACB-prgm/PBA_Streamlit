@@ -169,7 +169,7 @@ def get_auth_api_params(account_info, service="dbx") -> dict:
         "auth_params" : {
             "client_id" : secrets["client_id"],
             'response_type': 'code',
-            'force_reapprove': 'true',
+            # 'force_reapprove': 'true',
             'token_access_type' : 'offline',
             'state' : account_info["ID"]
         },
