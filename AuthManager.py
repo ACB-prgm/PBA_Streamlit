@@ -1,6 +1,5 @@
-from urllib.parse import urlencode
+from streamlit.components.v1 import html
 import streamlit as st
-import webbrowser
 import requests
 import gspread
 import hashlib
@@ -188,6 +187,18 @@ def get_auth_api_params(account_info, service="dbx") -> dict:
 def hash(input_string:str) -> str:
     return hashlib.sha256(input_string.encode('utf-8')).hexdigest()
 
+def nav_to(url, message="Click here if you are not redirected automatically!"):
+    js = f'<script>window.open("{url}", "_blank");</script>'
+    html(js)
+    st.write(f'''<a target="_blank" href="{url}">
+                                <button>
+                                    {message}
+                                </button>
+                            </a>''',
+                       unsafe_allow_html=True
+                        )
+
+
 @st.cache_data
 def create_admin(info):
     # PULL THE ADMINS INFO
@@ -288,7 +299,8 @@ def authorize(account_info, service="dbx"):
             AUTH_API_STORE_ENDPOINT,
             json=get_auth_api_params(account_info, service)
         )
-        webbrowser.open_new_tab(AUTH_API_LOGIN_ENDPOINT + account_info["ID"])
+        serve_name = "Dropbox" if service == "dbx" else service.title()
+        nav_to(AUTH_API_LOGIN_ENDPOINT + account_info["ID"], f"Click here to sign in to {serve_name} if you are not redirected automatically")
         st.session_state["auth_state"] = 1
         time.sleep(4)
         st.experimental_rerun()
